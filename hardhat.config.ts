@@ -15,6 +15,9 @@ const GOERLI_RPC_URL = process.env.GOERLI_RPC_URL!.toString()
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "key"
 const COINMARKETCAP_API_KEY = process.env.COINMARKETCAP_API_KEY || "key"
 
+const encryptedJson =
+  fs.readFileSync("./encrypted-publicTest.json", "utf8") || "emptry"
+
 let PRIVATE_KEY: string
 if (process.env.WAL_PASS) {
     PRIVATE_KEY = new ethers.Wallet.fromEncryptedJsonSync(encryptedJson, process.env.WAL_PASS)
@@ -33,16 +36,7 @@ const config: HardhatUserConfig = {
                 settings: {
                     optimizer: {
                         enabled: true,
-                        runs: 0,
-                    },
-                },
-            },
-            {
-                version: "0.6.12",
-                settings: {
-                    optimizer: {
-                        enabled: true,
-                        runs: 0,
+                        runs: 1000000,
                     },
                 },
             },

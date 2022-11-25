@@ -12,3 +12,4 @@ gas-report.txt
 coverage.json
 deployments
 coverage
+.vscode

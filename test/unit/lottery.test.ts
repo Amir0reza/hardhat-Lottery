@@ -93,6 +93,12 @@ network.config.chainId !== 31337
                       lottery.openBets(expectedClosingTime)
                   ).to.revertedWithCustomError(lottery, "TimestampPassed")
               })
+
+              it("Correctly emit the event", async () => {
+                  expect(await lottery.openBets(expectedClosingTime))
+                      .to.emit(lottery, "LotteryOpened")
+                      .withArgs(expectedClosingTime)
+              })
           })
 
           describe("PurchaseTokens function", function () {
@@ -199,25 +205,134 @@ network.config.chainId !== 31337
                   const closingTime = (
                       await deployer.provider?.getBlock("latest")
                   )?.timestamp
-                  expectedClosingTime = closingTime! + 15
-                  console.log(expectedClosingTime)
+                  expectedClosingTime = closingTime! + 10
 
                   await lottery.openBets(expectedClosingTime)
                   await lottery.connect(better).betMany(10)
               })
 
               it("Revert if closing time is not passed", async () => {
-                  expect(
-                      await lottery.closeLottery()
+                  await expect(
+                      lottery.closeLottery()
                   ).to.revertedWithCustomError(lottery, "TooSoonToClose")
               })
 
-              it("Revert if the betting is already close", async () => {
+              it("Revert if lottery is already close", async () => {
+                  await network.provider.send("evm_increaseTime", [10])
+                  await network.provider.send("evm_mine", [])
+                  await lottery.closeLottery()
 
-                  expect(
-                      await lottery.closeLottery()
+                  await expect(
+                      lottery.closeLottery()
                   ).to.revertedWithCustomError(lottery, "LotteryIsClose")
-                  console.log(await deployer.provider?.getBlock("latest"))
+              })
+
+              it("Set winner prize correctly", async () => {
+                  await network.provider.send("evm_increaseTime", [10])
+                  await network.provider.send("evm_mine", [])
+
+                  await lottery.closeLottery()
+
+                  const ownerPoolBalance = await lottery.getOwnerPool()
+                  const prizePoolBalance = await lottery.getPrizePool()
+                  const betterBalance = await lottery.getPrize(better.address)
+
+                  expect(ownerPoolBalance).to.eq(ethers.utils.parseEther("2"))
+                  expect(prizePoolBalance).to.eq(ethers.utils.parseEther("0"))
+                  expect(betterBalance).to.eq(ethers.utils.parseEther("10"))
+              })
+
+              it("Correctly emit the event", async () => {
+                  await network.provider.send("evm_increaseTime", [10])
+                  await network.provider.send("evm_mine", [])
+                  await expect(lottery.closeLottery())
+                      .to.emit(lottery, "LotteryClosed")
+                      .withArgs(better.address, ethers.utils.parseEther("10"))
+              })
+
+              describe("prizeWithdraw function", async () => {
+                  beforeEach(async () => {
+                      await network.provider.send("evm_increaseTime", [10])
+                      await network.provider.send("evm_mine", [])
+
+                      await lottery.closeLottery()
+                  })
+
+                  it("Send the correct amount of token to the winner", async () => {
+                      await lottery
+                          .connect(better)
+                          .prizeWithdraw(ethers.utils.parseEther("2"))
+                      const betterTokenBalance = await paymentToken.balanceOf(
+                          better.address
+                      )
+                      const betterPrizeBalance = await lottery.getPrize(
+                          better.address
+                      )
+
+                      expect(betterTokenBalance).to.eq(
+                          ethers.utils.parseEther("40")
+                      )
+                      expect(betterPrizeBalance).to.eq(
+                          ethers.utils.parseEther("8")
+                      )
+                  })
+
+                  it("Revert if doesn't have enogh prize", async () => {
+                      await expect(
+                          lottery
+                              .connect(better)
+                              .prizeWithdraw(ethers.utils.parseEther("40"))
+                      ).to.revertedWithCustomError(lottery, "NotEnoughMoney")
+                  })
+              })
+
+              describe("ownerWithdraw function", async () => {
+                  beforeEach(async () => {
+                      await network.provider.send("evm_increaseTime", [10])
+                      await network.provider.send("evm_mine", [])
+
+                      await lottery.closeLottery()
+                  })
+
+                  it("Send the correct amount of token to the owner", async () => {
+                      await lottery.ownerWithdraw(ethers.utils.parseEther("2"))
+                      const ownerTokenBalance = await paymentToken.balanceOf(
+                          deployer.address
+                      )
+                      const ownerPrizeBalance = await lottery.getOwnerPool()
+
+                      expect(ownerTokenBalance).to.eq(
+                          ethers.utils.parseEther("2")
+                      )
+                      expect(ownerPrizeBalance).to.eq(
+                          ethers.utils.parseEther("0")
+                      )
+                  })
+              })
+          })
+
+          describe("returnTokens function", function () {
+              beforeEach(async () => {
+                  await lottery.purchaseTokens({
+                      value: ethers.utils.parseEther("1"),
+                  })
+              })
+
+              it("Correctly return token to burn and receive ETH", async () => {
+                  await paymentToken.approve(
+                      lottery.address,
+                      ethers.utils.parseEther("5")
+                  )
+                  await lottery.returnTokens(ethers.utils.parseEther("5"))
+
+                  const contractETHBalance = await ethers.provider.getBalance(
+                      lottery.address
+                  )
+                  const deployerTokenBalance = await paymentToken.balanceOf(
+                      deployer.address
+                  )
+                  expect(contractETHBalance.toString()).to.eq("0")
+                  expect(deployerTokenBalance.toString()).to.eq("0")
               })
           })
       })
