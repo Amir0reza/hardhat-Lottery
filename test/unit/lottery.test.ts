@@ -17,6 +17,13 @@ network.config.chainId !== 31337
               attacker: SignerWithAddress,
               better: SignerWithAddress
 
+          const DEFAULT_ADMIN_ROLE =
+              "0x0000000000000000000000000000000000000000000000000000000000000000"
+          const LOTTERY_ADMIN_ROLE = ethers.utils.keccak256(
+              ethers.utils.hexlify(
+                  ethers.utils.toUtf8Bytes("LOTTERY_ADMIN_ROLE")
+              )
+          )
           beforeEach(async () => {
               const accounts = await ethers.getSigners()
               deployer = accounts[0]
@@ -55,6 +62,20 @@ network.config.chainId !== 31337
                   expect("LotteryTokenClassic").to.eq(name)
                   expect("LTC").to.eq(symbol)
               })
+
+              it("Correctly sets the default admin role", async () => {
+                const adminLotteryRole = await lottery.LOTTERY_ADMIN_ROLE()
+                const defaultAdminRole = await lottery.DEFAULT_ADMIN_ROLE()
+                expect(adminLotteryRole).to.eq(LOTTERY_ADMIN_ROLE)
+                expect(defaultAdminRole).to.eq(DEFAULT_ADMIN_ROLE)
+              })
+
+              it("Grat roles correctly to lottery admins", async () => {
+                const deployerCheck = await lottery.hasRole(LOTTERY_ADMIN_ROLE, deployer.address)
+                const alexCheck = await lottery.hasRole(LOTTERY_ADMIN_ROLE, "0x9E3F993EcF58eea03EcA17A37BAcE4E94700A45D")
+                expect(deployerCheck).to.eq(true)
+                expect(alexCheck).to.eq(true)
+              })
           })
 
           describe("OpenBets function", function () {
@@ -81,7 +102,7 @@ network.config.chainId !== 31337
               it("Reverts if called by non owner address", async () => {
                   await expect(
                       lottery.connect(attacker).openBets(expectedClosingTime)
-                  ).to.revertedWith("Ownable: caller is not the owner")
+                  ).to.revertedWith(`AccessControl: account ${attacker.address.toLowerCase()} is missing role ${LOTTERY_ADMIN_ROLE}`)
               })
 
               it("Reverts if closing time is not in future", async () => {

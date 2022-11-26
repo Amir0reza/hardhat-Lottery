@@ -2,6 +2,7 @@ import { DeployFunction } from "hardhat-deploy/dist/types"
 import { HardhatRuntimeEnvironment } from "hardhat/types"
 import verify from "../utils/verify"
 import { ethers } from "hardhat"
+import { LotteryTokenClassic, Lottery } from '../typechain-types';
 
 export const PURCHASE_RATIO = 5
 export const BET_PRICE = ethers.utils.parseEther("1")
@@ -28,15 +29,19 @@ const deployLottery: DeployFunction = async function (
         from: deployer.address,
         log: true,
         args: args,
-        waitConfirmations: 1,
+        waitConfirmations: 4,
     })
 
     log(`Lottery contract deployed at ${lottery.address}`)
     log("__________________________________________________")
 
+    const lottCCC: Lottery = await ethers.getContract("Lottery")
+    const paymentTokenAddress = await lottCCC.getPaymentToken()
+    const paymentToken: LotteryTokenClassic = await ethers.getContractAt("LotteryTokenClassic", paymentTokenAddress)
     if (chainId != 31337 && process.env.ETHERSCAN_API_KEY) {
         // verify the code
         await verify(lottery.address, args)
+        await verify(paymentToken.address, [])
     }
 }
 

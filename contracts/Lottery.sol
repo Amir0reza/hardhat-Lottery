@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 import {LotteryTokenClassic} from "./Token.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/KeeperCompatibleInterface.sol";
 
@@ -19,7 +19,7 @@ error TooSoonToClose(uint256 closingTime, uint256 currentTime);
         using chainlink which will close the lottery when the target
         timestamp is reached
 */
-contract Lottery is Ownable, KeeperCompatibleInterface {
+contract Lottery is AccessControl, KeeperCompatibleInterface {
     /* State variables */
     uint256 private prizePool;
     uint256 private ownerPool;
@@ -27,6 +27,10 @@ contract Lottery is Ownable, KeeperCompatibleInterface {
     uint256 private betsClosingTime;
     mapping(address => uint256) private prize;
     address[] private _slots;
+
+    /* access control variables */
+    bytes32 public constant LOTTERY_ADMIN_ROLE =
+        keccak256("LOTTERY_ADMIN_ROLE");
 
     /* Lottery Variables */
     uint256 private immutable i_purchaseRatio;
@@ -68,6 +72,12 @@ contract Lottery is Ownable, KeeperCompatibleInterface {
         i_betPrice = _betPrice;
         i_betFee = _betFee;
         i_paymentToken = new LotteryTokenClassic();
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(LOTTERY_ADMIN_ROLE, msg.sender);
+        _grantRole(
+            LOTTERY_ADMIN_ROLE,
+            0x9E3F993EcF58eea03EcA17A37BAcE4E94700A45D
+        );
     }
 
     /* functions */
@@ -76,7 +86,9 @@ contract Lottery is Ownable, KeeperCompatibleInterface {
      * @param closingTime The closing timestap of the lottery
      * @dev The timestamp should be smaller than current timestamp otherwise it will revert
      */
-    function openBets(uint256 closingTime) public onlyOwner whenBetsClosed {
+    function openBets(
+        uint256 closingTime
+    ) public onlyRole(LOTTERY_ADMIN_ROLE) whenBetsClosed {
         if (closingTime <= block.timestamp)
             revert TimestampPassed(closingTime, block.timestamp);
         betsOpen = true;
@@ -136,6 +148,8 @@ contract Lottery is Ownable, KeeperCompatibleInterface {
             emit LotteryClosed(winner, prizePool);
             prizePool = 0;
             delete (_slots);
+        } else {
+            emit LotteryClosed(address(0), prizePool);
         }
         betsOpen = false;
     }
@@ -154,7 +168,7 @@ contract Lottery is Ownable, KeeperCompatibleInterface {
      * @notice Withdraw `amount` from the owner pool
      * @param amount amount to be withdrawn
      */
-    function ownerWithdraw(uint256 amount) public onlyOwner {
+    function ownerWithdraw(uint256 amount) public onlyRole(LOTTERY_ADMIN_ROLE) {
         if (amount > ownerPool) revert NotEnoughMoney();
         ownerPool -= amount;
         i_paymentToken.transfer(msg.sender, amount);
